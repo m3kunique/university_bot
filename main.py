@@ -73,10 +73,8 @@ async def get_user_status(message):
     return user_status
 
 
-
-async def f_user_verify(message):
-    user_id = message.from_user.id
-    user_name = message.from_user.username
+async def f_user_verify(user_id, username, message):
+    user_name = username
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))  # поиск нужной записи
@@ -97,9 +95,9 @@ async def f_user_verify(message):
         if user_status == 0:
             print("Проверка завершена! Пользователь забанен ⛔️!")
         else:
-            print("Проверка завершена! Пользователь одобрен ✅️!")
             if message.text == '/start':
                 await start_message_1(message)
+            print("Проверка завершена! Пользователь одобрен ✅️!")
             return user_status
     conn.close()
 
@@ -157,7 +155,7 @@ async def f_password(message: types.Message, state: FSMContext):
             print(traceback.print_exc())
             await bot.send_message(message.chat.id, 'Вы ввели неверные данные, попробуйте еще раз')
             await state.reset_data()
-            await f_user_verify(message)
+            await f_user_verify(message.from_user.id, message.from_user.username, message)
             await state.finish()
 
 
@@ -168,7 +166,7 @@ async def getmyidbroshka(message):
 
 @dp.message_handler(commands=['start'])
 async def start_message(message: types.Message, state: FSMContext):
-    await f_user_verify(message)
+    await f_user_verify(message.from_user.id, message.from_user.username, message)
 
 
 async def start_message_1(message):
@@ -571,7 +569,7 @@ async def f_starosta_note_3(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(lambda call: True, state='*')
 async def query_handler(query: types.CallbackQuery):
     if query.data.startswith('c_timetable_now'):
-        user_status = await f_user_verify(query.message)
+        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
         if user_status != 0:
             day_id = query.data.split(' ')[1]
             course = query.data.split(' ')[2]
@@ -587,7 +585,7 @@ async def query_handler(query: types.CallbackQuery):
             pass
 
     elif query.data == 'c_add_user':
-        user_status = await f_user_verify(query.message)
+        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
         if user_status >= 5:
             await f_delete_this_message(query.message)
             await query.message.answer("Введите ID")
@@ -630,8 +628,7 @@ async def query_handler(query: types.CallbackQuery):
 
     elif query.data.startswith('c_starosta'):
         reply = query.data.split(' ')[1]
-        # todo доставть статус из бд
-        user_status = await f_user_verify(query.message)
+        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
         if user_status >= 3:
             await f_delete_this_message(query.message)
             await f_starosta_main_page_2(query.message, reply)
