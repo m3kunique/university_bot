@@ -144,20 +144,22 @@ async def f_password(message: types.Message, state: FSMContext):
                            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                            (message.from_user.id, message.from_user.username, name, course,
                             0, None, 1, datas['username'], datas['password']))
-            await bot.edit_message_text(text='🏅  Вы успешно зарегистрированы  🏅',message_id=ans.message_id, chat_id=message.chat.id)
+            await bot.edit_message_text(text='🏅  Вы успешно зарегистрированы  🏅', message_id=ans.message_id,
+                                        chat_id=message.chat.id)
             conn.commit()
             conn.close()
             await state.reset_data()
             await state.finish()
             await start_message_1(message)
         except Exception as E:
-            await bot.send_message(config.archive_chat_id, f'у вас ошибка блять *{E}* вот такая, иди исправляй сука тварь падла мразь')
+            await bot.send_message(config.archive_chat_id,
+                                   f'у вас ошибка блять *{E}* вот такая, иди исправляй сука тварь падла мразь')
             print(traceback.print_exc())
-            await bot.send_message(message.chat.id, 'Ты ввел неверный логин или пароль\n\nЕсли такая хрень написалась после успешной регистрации, то бля, не поленись и скинь мне че ты ввел')
+            await bot.send_message(message.chat.id,
+                                   'Ты ввел неверный логин или пароль\n\nЕсли такая хрень написалась после успешной регистрации, то бля, не поленись и скинь мне че ты ввел')
             await state.reset_data()
             await state.finish()
             await f_user_verify(message.from_user.id, message.from_user.username, message)
-
 
 
 @dp.message_handler(commands=['getmyid'])
@@ -223,6 +225,7 @@ async def start_message_1(message):
 async def test(message):
     await message.answer(f"Сегодня: {d.today()}\n"
                          f"День недели: {d.isoweekday(d.today())}")
+
 
 # todo
 # подключиться к бд и проверить есть ли предмет в списке, если есть, то кнопка с дз
@@ -522,10 +525,12 @@ async def f_starosta_main_page(message, user_id):
         b_starosta_user_info = types.InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
         b_start_menu = types.InlineKeyboardButton('Выйти', callback_data=f'c_starosta {0}')
         b_starosta_announcment = types.InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
-        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
+        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано) (это может использовать ответственный за какую-то группу)', callback_data=f'c_starosta {2}')
         b_starosta_add_user = types.InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
         b_starosta_del_user = types.InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
-        # сюда надо добавить отметки присутствующих
+        # добавить отметки отсутствующих, и чтобы ответственные тоже могли
+        # добавить удаление юзеров из группы нахуй, чтобы перенести их в другую группу
+        # добавить выход в главное меню
         # todo
 
         key_starosta_main_page.add(b_starosta_announcment)
@@ -540,6 +545,8 @@ async def f_starosta_main_page(message, user_id):
 async def f_starosta_main_page_2(user_id, reply):
     if reply == '1':  # обьявление
         await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать')
+        # сделать отмену действия, чтобы чел не обосрался
+        # todo
         await Form.s_starosta_announcement.set()
     elif reply == '2':  # отметить
         await Form.s_starosta_note_1.set()
@@ -547,7 +554,6 @@ async def f_starosta_main_page_2(user_id, reply):
         pass
     elif reply == '4':  # удалить
         pass
-
 
 
 @dp.message_handler(state=Form.s_starosta_announcement)
@@ -602,7 +608,7 @@ async def f_starosta_note_3(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(lambda call: True, state='*')
 async def query_handler(query: types.CallbackQuery):
     if query.data.startswith('c_timetable_now'):
-        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
+        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
         if user_status != 0:
             day_id = query.data.split(' ')[1]
             course = query.data.split(' ')[2]
@@ -618,7 +624,7 @@ async def query_handler(query: types.CallbackQuery):
             pass
 
     elif query.data == 'c_add_user':
-        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
+        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
         if user_status >= 5:
             await f_delete_this_message(query.message)
             await query.message.answer("Введите ID")
@@ -661,7 +667,7 @@ async def query_handler(query: types.CallbackQuery):
 
     elif query.data.startswith('c_starosta'):
         reply = query.data.split(' ')[1]
-        user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
+        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
         if user_status >= 3:
             await f_delete_this_message(query.message)
             await f_starosta_main_page_2(query.from_user.id, reply)
