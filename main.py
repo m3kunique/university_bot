@@ -52,6 +52,7 @@ class Form(StatesGroup):
     s_add_user_5 = State()
     s_add_user_6 = State()
     s_add_user_true = State()
+    s_starosta_announcement = State()
     s_add_homework_1 = State()
     s_starosta_note_1 = State()
     s_starosta_note_2 = State()
@@ -519,32 +520,66 @@ async def f_starosta_main_page(message, user_id):
     if user_status == 3 or user_status >= 5:
         key_starosta_main_page = types.InlineKeyboardMarkup()
         b_starosta_user_info = types.InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
-        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (делаю)', callback_data=f'c_starosta {1}')
-        b_starosta_add_user = types.InlineKeyboardButton('➕ Добавить (делаю)', callback_data=f'c_starosta {2}')
-        b_starosta_del_user = types.InlineKeyboardButton('🗑 Удалить (делаю)', callback_data=f'c_starosta {3}')
+        b_start_menu = types.InlineKeyboardButton('Выйти', callback_data=f'c_starosta {0}')
+        b_starosta_announcment = types.InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
+        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
+        b_starosta_add_user = types.InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
+        b_starosta_del_user = types.InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
         # сюда надо добавить отметки присутствующих
+        # todo
 
+        key_starosta_main_page.add(b_starosta_announcment)
         key_starosta_main_page.add(b_starosta_user_info)
         key_starosta_main_page.add(b_starosta_search_user, b_starosta_add_user, b_starosta_del_user)
+
         await message.answer("💃 <b>Панель старосты</b> 💃"
                              f"\n\n◾️ <b>Студентов в группе:</b> <code>{str(students_course_kol)}</code>",
                              reply_markup=key_starosta_main_page)
 
 
-async def f_starosta_main_page_2(message: types.Message, reply):
-    if reply == '1':  # отметить
+async def f_starosta_main_page_2(user_id, reply):
+    if reply == '1':  # обьявление
+        await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать')
+        await Form.s_starosta_announcement.set()
+    elif reply == '2':  # отметить
         await Form.s_starosta_note_1.set()
-    elif reply == '2':  # добавить
+    elif reply == '3':  # добавить
         pass
-    elif reply == '3':  # удалить
+    elif reply == '4':  # удалить
         pass
+
+
+
+@dp.message_handler(state=Form.s_starosta_announcement)
+async def f_starosta_announcement(announcement: types.Message, state: FSMContext):
+    user_id = announcement.from_user.id
+    message = announcement
+    announcement = announcement.text
+    conn = sqlite3.connect('db.db', check_same_thread=False)
+    cursor = conn.cursor()
+    course = cursor.execute('SELECT course FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
+    spisok_polupokerov = cursor.execute('SELECT user_id FROM users WHERE course =? AND status > 0',(course,)).fetchall()
+    for i in spisok_polupokerov:
+        if i[0] == user_id:
+            await bot.send_message(user_id, f'✅  Сообщение было успешно доставлено.')
+            await f_starosta_main_page(message, user_id)
+        else:
+            await bot.send_message(i[0], f'❗❗❗ Староста вещает ❗❗❗\n\n{announcement}')
+    # todo
+    # сделать кнопку (закрепить?), если человек нажмет, то бот закрепит сообщение
+    conn.close()
+    await state.finish()
 
 
 @dp.message_handler(state=Form.s_starosta_note_1)
 async def f_starosta_note_1(message: types.Message, state: FSMContext):
     await message.answer("Напишите предмет на котором вы сейчас")
     # todo
-    # надо будет сделать кнопочки как только разберусь как из парсера нормально вычленять предметы, чтобы бд не засорять хламом
+    # надо будет сделать кнопочки как только разберусь как из парсера нормально забирать предметы
+    # надо написать хрень, которая дает кнопки по расписанию на сегодня (типо все сегодняшние предметы)
+    # старосте надо просто написать фамилию отсутствующего, если 2 или больше челов с одной фамилией, то кнопки выбора
+    # потом три кнопки (отменить, сохранить, вернуться назад)
+    # в бд заносить список людей, кто отсутствует
     # количество отсутствующих
     await Form.next()
 
@@ -629,7 +664,7 @@ async def query_handler(query: types.CallbackQuery):
         user_status = await f_user_verify(query.from_user.id,query.from_user.username,query.message)
         if user_status >= 3:
             await f_delete_this_message(query.message)
-            await f_starosta_main_page_2(query.message, reply)
+            await f_starosta_main_page_2(query.from_user.id, reply)
 
     elif query.data.startswith('c_add_user_true'):
         chat_id = query.message.chat.id
