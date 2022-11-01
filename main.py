@@ -525,12 +525,10 @@ async def f_starosta_main_page(message, user_id):
         b_starosta_user_info = types.InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
         b_start_menu = types.InlineKeyboardButton('Выйти', callback_data=f'c_starosta {0}')
         b_starosta_announcment = types.InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
-        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано) (это может использовать ответственный за какую-то группу)', callback_data=f'c_starosta {2}')
+        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
         b_starosta_add_user = types.InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
         b_starosta_del_user = types.InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
-        # добавить отметки отсутствующих, и чтобы ответственные тоже могли
-        # добавить удаление юзеров из группы нахуй, чтобы перенести их в другую группу
-        # добавить выход в главное меню
+        # сюда надо добавить отметки присутствующих
         # todo
 
         key_starosta_main_page.add(b_starosta_announcment)
@@ -545,8 +543,6 @@ async def f_starosta_main_page(message, user_id):
 async def f_starosta_main_page_2(user_id, reply):
     if reply == '1':  # обьявление
         await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать')
-        # сделать отмену действия, чтобы чел не обосрался
-        # todo
         await Form.s_starosta_announcement.set()
     elif reply == '2':  # отметить
         await Form.s_starosta_note_1.set()
@@ -564,7 +560,8 @@ async def f_starosta_announcement(announcement: types.Message, state: FSMContext
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     course = cursor.execute('SELECT course FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
-    spisok_polupokerov = cursor.execute('SELECT user_id FROM users WHERE course =? AND status > 0',(course,)).fetchall()
+    spisok_polupokerov = cursor.execute('SELECT user_id FROM users WHERE course =? AND status > 0',
+                                        (course,)).fetchall()
     for i in spisok_polupokerov:
         if i[0] == user_id:
             await bot.send_message(user_id, f'✅  Сообщение было успешно доставлено.')
@@ -575,6 +572,21 @@ async def f_starosta_announcement(announcement: types.Message, state: FSMContext
     # сделать кнопку (закрепить?), если человек нажмет, то бот закрепит сообщение
     conn.close()
     await state.finish()
+
+
+# todo
+# это для создания групп по интересам
+@dp.message_handler(commands=['test'])
+async def test(message: types.Message):
+    conn = sqlite3.connect('db.db')
+    user_id = message.from_user.id
+    cursor = conn.cursor()
+    check = cursor.execute('SELECT groups FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
+    check = check.split('/split.,&!/')
+    if '1' in check:
+        print('ура, обьект найден')
+    await bot.send_message(user_id, f'{check}')
+    conn.close()
 
 
 @dp.message_handler(state=Form.s_starosta_note_1)
