@@ -43,11 +43,8 @@ l_kniga_emoji = {0: "📕",
 
 
 class Form(StatesGroup):
-    s_start = State()
     s_username = State()
     s_password = State()
-    user_id = State()
-    user_name = State()
     s_add_user = State()
     s_add_user_2 = State()
     s_add_user_3 = State()
@@ -62,7 +59,7 @@ class Form(StatesGroup):
 
 
 async def f_delete_this_message(message):
-    await bot.delete_message(message.chat.id, message.message_id)  # Удаляет сообщение текущее
+    await bot.delete_message(message.chat.id, message.message_id)
 
 
 async def get_user_status(message):
@@ -114,11 +111,11 @@ async def f_username(message: types.Message, state: FSMContext):
 async def f_password(message: types.Message, state: FSMContext):
     async with state.proxy() as datas:
         ans = await bot.send_message(chat_id=message.chat.id, text='Загрузка...')
-        password = message.text
+        datas['password'] = message.text
         url = 'https://lks.bmstu.ru/portal3/login?back=https://lks.bmstu.ru/portfolio'
         data = {
             'username': datas['username'],
-            'password': password,
+            'password': datas['password'],
             '_eventId': 'submit'
         }
         s = requests.Session()
@@ -140,23 +137,26 @@ async def f_password(message: types.Message, state: FSMContext):
             # DOB = info[1].text
             # education_level = info[2].text
             course = info[3].text
-            # заносим все в бд
             conn = sqlite3.connect('db.db', check_same_thread=False)
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO users (user_id, username, FIO, course, sub, sub_date, status) '
-                           'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            cursor.execute('INSERT INTO users (user_id, username, FIO, course, sub, sub_date, status, login, password) '
+                           'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                            (message.from_user.id, message.from_user.username, name, course,
-                            0, None, 1))
+                            0, None, 1, datas['username'], datas['password']))
             await bot.edit_message_text(text='🏅  Вы успешно зарегистрированы  🏅',message_id=ans.message_id, chat_id=message.chat.id)
             conn.commit()
             conn.close()
+            await state.reset_data()
+            await state.finish()
             await start_message_1(message)
         except Exception as E:
+            await bot.send_message(config.archive_chat_id, f'у вас ошибка блять *{E}* вот такая, иди исправляй сука тварь падла мразь')
             print(traceback.print_exc())
-            await bot.send_message(message.chat.id, 'Вы ввели неверные данные, попробуйте еще раз')
+            await bot.send_message(message.chat.id, 'Ты ввел неверный логин или пароль\n\nЕсли такая хрень написалась после успешной регистрации, то бля, не поленись и скинь мне че ты ввел')
             await state.reset_data()
-            await f_user_verify(message.from_user.id, message.from_user.username, message)
             await state.finish()
+            await f_user_verify(message.from_user.id, message.from_user.username, message)
+
 
 
 @dp.message_handler(commands=['getmyid'])
@@ -223,7 +223,7 @@ async def test(message):
     await message.answer(f"Сегодня: {d.today()}\n"
                          f"День недели: {d.isoweekday(d.today())}")
 
-
+# todo
 # подключиться к бд и проверить есть ли предмет в списке, если есть, то кнопка с дз
 # если нет, то добавить предмет в бд и кнопка с дз
 async def f_timetable_week(message: types.Message, course, week_count):  # парсер расписания на неделю
@@ -254,8 +254,8 @@ async def f_timetable_week(message: types.Message, course, week_count):  # па�
             break
 
     if status == 0:
-        await message.answer(('\n\nПроверьте написание вашей группы.'
-                              '\nЕсли все правильно, то обратитесь к создателю бота (ссылка на профиль в статусе)'))
+        await message.answer('\nОбратитесь к слабому создателю этого слабого бота (@m3k_unique)'
+                             '\n\nНу и подпишитесь на мой канал @m3k_channel')
 
 
 @dp.message_handler(commands=['homework'])
@@ -389,11 +389,10 @@ async def f_admin_panel_main_1(message: types.Message):
 
 
 async def f_admin_panel_main(message: types.Message):
+    user_id = message.from_user.id
+    user_status = await f_user_verify(user_id, message.from_user.username, message)
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    user_id = message.from_user.id
-    cursor.execute("SELECT status FROM users WHERE user_id=?", (user_id,))  # получаем статус из бд
-    user_status = cursor.fetchone()[0]
     user_kol = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     key_admin_panel = types.InlineKeyboardMarkup()
     b_search_user = types.InlineKeyboardButton('Поиск юзеров', callback_data='c_search_users')
@@ -512,10 +511,9 @@ async def f_starosta_main_page_1(message: types.Message):
 
 
 async def f_starosta_main_page(message, user_id):
+    user_status = await f_user_verify(user_id, message.from_user.username, message)
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute("SELECT status FROM users WHERE user_id=?", (user_id,))
-    user_status = cursor.fetchone()[0]
     user_course = cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,)).fetchone()[0]
     students_course_kol = cursor.execute(f"SELECT COUNT(*) FROM users WHERE course = '{user_course}'").fetchone()[0]
     if user_status == 3 or user_status >= 5:
