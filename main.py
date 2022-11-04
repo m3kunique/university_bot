@@ -3,6 +3,8 @@ import fake_useragent
 import time
 import aiogram.utils.markdown as md
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import math
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
@@ -62,17 +64,15 @@ class Form(StatesGroup):
 async def f_delete_this_message(message):
     await bot.delete_message(message.chat.id, message.message_id)
 
-
-async def get_user_status(message):
+async def get_user_status(user_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    user_status = cursor.execute("SELECT status FROM users WHERE user_id=?", (message.from_user.id,)).fetchone()[0]
+    user_status = cursor.execute("SELECT status FROM users WHERE user_id=?", (user_id,)).fetchone()[0]
     conn.close()
     return user_status
 
 
 async def f_user_verify(user_id, username, message):
-    user_name = username
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))  # поиск нужной записи
@@ -81,9 +81,9 @@ async def f_user_verify(user_id, username, message):
         await bot.send_message(user_id, 'Для регистрации введите логин от личного кабинета студента')
         await Form.s_username.set()
     else:
-        print("Пользователь найден в базе: " + str(user_name) + " || " + str(user_id))
+        print("Пользователь найден в базе: " + str(username) + " || " + str(user_id))
         old_user_name = cursor.execute("SELECT username FROM users WHERE user_id=?", (user_id,)).fetchone()[0]
-        fresh_user_name = user_name
+        fresh_user_name = username
         if old_user_name != fresh_user_name:
             await bot.send_message(config.archive_chat_id, f"❗️ Пользователь <code>{user_id}</code> сменил юзернейм!"
                                                            f"\n⚠️ Был @{old_user_name} стал @{fresh_user_name}")
@@ -94,7 +94,7 @@ async def f_user_verify(user_id, username, message):
             print("Проверка завершена! Пользователь забанен ⛔️!")
         else:
             if message.text == '/start':
-                await start_message_1(message)
+                await start_message_1(user_id, username)
             print("Проверка завершена! Пользователь одобрен ✅️!")
             return user_status
     conn.close()
@@ -140,9 +140,11 @@ async def f_password(message: types.Message, state: FSMContext):
             course = info[3].text
             conn = sqlite3.connect('db.db', check_same_thread=False)
             cursor = conn.cursor()
+            user_id = message.from_user.id
+            username = message.from_user.username
             cursor.execute('INSERT INTO users (user_id, username, FIO, course, sub, sub_date, status, login, password) '
                            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                           (message.from_user.id, message.from_user.username, name, course,
+                           (user_id, username, name, course,
                             0, None, 1, datas['username'], datas['password']))
             await bot.edit_message_text(text='🏅  Вы успешно зарегистрированы  🏅', message_id=ans.message_id,
                                         chat_id=message.chat.id)
@@ -150,7 +152,7 @@ async def f_password(message: types.Message, state: FSMContext):
             conn.close()
             await state.reset_data()
             await state.finish()
-            await start_message_1(message)
+            await start_message_1(user_id, username)
         except Exception as E:
             await bot.send_message(config.archive_chat_id,
                                    f'у вас ошибка блять *{E}* вот такая, иди исправляй сука тварь падла мразь')
@@ -168,20 +170,19 @@ async def getmyidbroshka(message):
 
 
 @dp.message_handler(commands=['start'])
-async def start_message(message: types.Message, state: FSMContext):
+async def start_message(message: types.Message):
     await f_user_verify(message.from_user.id, message.from_user.username, message)
 
 
-async def start_message_1(message):
-    user_id = message.from_user.id
+async def start_message_1(user_id, username):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    user_status = await get_user_status(message)
-    if user_status == 0:  # если юзер забанен то
-        await message.answer(f'⛔️ ВЫ ЗАБАНЕНЫ'
+    user_status = await get_user_status(user_id)
+    if user_status == 0:
+        await bot.send_message(user_id, f'⛔️ ВЫ ЗАБАНЕНЫ'
                              f'\n\n   Ну а если вы просто не зарегистрированы, то обратитесь к старосте группы')
-    elif user_status >= 1:  # если не в бане
-        cursor.execute("SELECT * FROM users WHERE user_id=?", (message.from_user.id,))
+    elif user_status >= 1:
+        cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
         info = cursor.fetchone()
         FIO = info[3]
         course = info[4]
@@ -191,22 +192,16 @@ async def start_message_1(message):
         if not rez:
             cursor.execute(f'''INSERT INTO courses (course) VALUES ('{course}')''')
             conn.commit()
-        key_start_message = types.InlineKeyboardMarkup()  # объявление клавиатуры
-        b_timetable_today = types.InlineKeyboardButton('📆🟠 на сегодня', callback_data=f'c_timetable_now {1} {course}')
-        b_timetable_tomorrow = types.InlineKeyboardButton('📆🟢 на завтра', callback_data=f'c_timetable_now {2} {course}')
-        b_timetable_week = types.InlineKeyboardButton('📆🟣 на неделю', callback_data=f'c_timetable_now {3} {course}')
-        b_setting = types.InlineKeyboardButton('⚙️ Настройки (не ворк)', callback_data='c_user_setting')
-        """
-        Выше ты объявляешь кнопки, где указываешь имя кнопки (отображаемое) и калбек дату которую будет ловить обработчик
-        Он в свою очередь находится в самом конце кода, последним хендлером
-
-        Что бы клавиатура показывалась к сообщению, нужно прописать ее через reply_markup = имя_клавиатуры (строка 112)
-        """
+        key_start_message = InlineKeyboardMarkup()  # объявление клавиатуры
+        b_timetable_today = InlineKeyboardButton('📆🟠 на сегодня', callback_data=f'c_timetable_now {1} {course}')
+        b_timetable_tomorrow = InlineKeyboardButton('📆🟢 на завтра', callback_data=f'c_timetable_now {2} {course}')
+        b_timetable_week = InlineKeyboardButton('📆🟣 на неделю', callback_data=f'c_timetable_now {3} {course}')
+        b_setting = InlineKeyboardButton('⚙️ Настройки (не ворк)', callback_data='c_user_setting')
         key_start_message.row(b_timetable_today, b_timetable_tomorrow)  # добавление кнопки в клавиатуру
         key_start_message.row(b_timetable_week)
         key_start_message.row(b_setting)
         if user_status != 0:
-            await message.answer(f"Привет, {message.from_user.username}"
+            await bot.send_message(user_id, f"Привет, {username}"
                                  f"\n\nПодписка: <b>{l_sub_status.get(sub)}</b>"
                                  f"\nАктивна до: <b>{sub_date}</b>"
                                  f"\n-----------------"
@@ -217,7 +212,7 @@ async def start_message_1(message):
                                  f"\n<b>🧠 Статус:</b> <code>{l_user_status.get(user_status)}</code>",
                                  reply_markup=key_start_message)
         else:
-            await message.answer("⛔️ <b>Доступ запрещен</b>")
+            await bot.send_message(user_id, "⛔️ <b>Доступ запрещен</b>")
         conn.close()
 
 
@@ -277,13 +272,18 @@ async def f_homework_panel_main(message: types.Message):
     course = cursor.fetchone()[0]
     homework_kol = cursor.execute("SELECT COUNT(*) FROM homework WHERE course=?", (course,)).fetchone()[0]
     if user_status >= 2:
-        key_homework_panel = types.InlineKeyboardMarkup()
-        b_add_homework = types.InlineKeyboardButton('Добавить домашнее задание', callback_data='c_add_homework')
-        b_edit_homework = types.InlineKeyboardButton('Редактировать существующие', callback_data='c_edit_homework')
-        key_homework_panel.add(b_add_homework)
-        key_homework_panel.add(b_edit_homework)
+        key_homework_panel = InlineKeyboardMarkup()
+        b_add_homework = InlineKeyboardButton('Добавить домашнее задание', callback_data='c_add_homework')
+        b_edit_homework = InlineKeyboardButton('Редактировать существующие', callback_data='c_edit_homework')
+        b_check_homework = InlineKeyboardButton('Посмотреть домашнее задание', callback_data='c_check_homework')
+        key_homework_panel.add(b_add_homework, b_edit_homework)
+        key_homework_panel.add(b_check_homework)
         await message.answer("📔️   --- <b>ПАНЕЛЬ ДОМАШКИ</b> ---   📔️" +
-                             f"\nДомашки в боте: {str(homework_kol)}", reply_markup=key_homework_panel)
+                             f"\nДомашки в вашей группе: {str(homework_kol)}", reply_markup=key_homework_panel)
+    elif user_status == 1:
+        key_homework_panel = InlineKeyboardMarkup()
+        b_check_homework = InlineKeyboardButton('Посмотреть домашнее задание', callback_data='c_check_homework')
+        key_homework_panel.add(b_check_homework)
     else:
         await bot.send_message(message.chat.id, text='У вас недостаточно прав для просмотра команды')
     conn.close()
@@ -297,18 +297,25 @@ async def f_homework_edit(user_id, chat_id):
     cursor.execute("SELECT class FROM homework WHERE course=?", (course,))  # получаем все названия
     names_all = cursor.fetchall()
     names = []
-    for i in range(len(names_all)):
-        if names_all[i][0] not in names:
-            names.append(names_all[i][0])
-
-    key_list_panel = types.InlineKeyboardMarkup()
-    for i in range(len(names)):
-        if i <= 5:
-            key_list_panel.add(types.InlineKeyboardButton(f'{names[i]}', callback_data=f'c_reference {names[i]}'))
-        else:
-            break
-    if len(names) > 5:
-        key_list_panel.add(types.InlineKeyboardButton(f'Показать остальные дз', callback_data='c_next'))
+    for i in names_all:
+        if i[0] not in names:
+            names.append(i[0])
+    key_list_panel = InlineKeyboardMarkup()
+    spisok = {j:InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=1)}
+    if len(spisok) > 5:
+        key_list_panel.add(spisok[1],spisok[2],spisok[3])
+        key_list_panel.add(spisok[4],spisok[5])
+        key_list_panel.add(InlineKeyboardButton(f'Показать остальные дз', callback_data='c_next'))
+        for i in range(1,6):
+            spisok.pop(i)
+    elif len(spisok) == 5:
+        key_list_panel.add(spisok[1], spisok[2], spisok[3])
+        key_list_panel.add(spisok[4], spisok[5])
+    else:
+        for i in range(1, len(spisok)+1):
+            key_list_panel.add(spisok[i])
+    #     todo
+    # сделать показ остальных дз
     await bot.send_message(chat_id=chat_id, text='Выберете домашнее задание для редактирования',
                            reply_markup=key_list_panel)
     conn.close()
@@ -328,8 +335,11 @@ async def f_homework_edit_1(homework, user_id, chat_id):
         id_of_homework = cursor.execute(
             f"SELECT id FROM homework WHERE (course LIKE '%{course}%') AND (text LIKE '%{text_all[i][0]}%')").fetchone()
         await bot.send_message(chat_id, text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
-                               reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton('Редактировать',
-                                                                                                        callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+                               reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Редактировать',callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+    #     todo
+    # сделать так, чтобы можно было лично для себя отмечать сделанные дз (это можно реализовать по уникальному id дз)
+    # у дз сделать строку в бд, в которой будет количество людей, кто выполнил это дз, и типо если количество
+    #  будет совпадать с количеством людей в группе, то все чистить и дз, и id
     conn.close()
 
 
@@ -398,9 +408,9 @@ async def f_admin_panel_main(message: types.Message):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     user_kol = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    key_admin_panel = types.InlineKeyboardMarkup()
-    b_search_user = types.InlineKeyboardButton('Поиск юзеров', callback_data='c_search_users')
-    b_add_user = types.InlineKeyboardButton('Добавить юзера', callback_data='c_add_user')
+    key_admin_panel = InlineKeyboardMarkup()
+    b_search_user = InlineKeyboardButton('Поиск юзеров', callback_data='c_search_users')
+    b_add_user = InlineKeyboardButton('Добавить юзера', callback_data='c_add_user')
     key_admin_panel.add(b_search_user)
     key_admin_panel.add(b_add_user)
     if user_status >= 5:
@@ -472,9 +482,9 @@ async def f_add_user_5(message: types.Message, state: FSMContext):
 async def f_add_user_6(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['add_user_status'] = message.text
-        markup = types.InlineKeyboardMarkup(resize_keyboard=True, selective=True)
-        markup.add(types.InlineKeyboardButton('Сохранить', callback_data=f'c_add_user_true {1}'))
-        markup.add(types.InlineKeyboardButton('Отменить', callback_data=f'c_add_user_true {0}'))
+        markup = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
+        markup.add(InlineKeyboardButton('Сохранить', callback_data=f'c_add_user_true {1}'))
+        markup.add(InlineKeyboardButton('Отменить', callback_data=f'c_add_user_true {0}'))
         await message.answer("Проверьте введенную информацию:"
                              f"\n\n<b> ID:</b> {data['add_user_id']}"
                              f"\n<b> FIO:</b> {data['add_user_FIO']}"
@@ -511,38 +521,43 @@ async def f_add_user_true(dati, chat_id, state: FSMContext):
 
 @dp.message_handler(commands=['starosta'])
 async def f_starosta_main_page_1(message: types.Message):
-    await f_starosta_main_page(message, message.from_user.id)
+    user_status = await f_user_verify(message.from_user.id, message.from_user.username, message)
+    if user_status == 3 or user_status >= 5:
+        await f_starosta_main_page(user_status, message.from_user.id)
 
 
-async def f_starosta_main_page(message, user_id):
-    user_status = await f_user_verify(user_id, message.from_user.username, message)
+async def f_starosta_main_page(user_status, user_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     user_course = cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,)).fetchone()[0]
     students_course_kol = cursor.execute(f"SELECT COUNT(*) FROM users WHERE course = '{user_course}'").fetchone()[0]
     if user_status == 3 or user_status >= 5:
-        key_starosta_main_page = types.InlineKeyboardMarkup()
-        b_starosta_user_info = types.InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
-        b_start_menu = types.InlineKeyboardButton('Выйти', callback_data=f'c_starosta {0}')
-        b_starosta_announcment = types.InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
-        b_starosta_search_user = types.InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
-        b_starosta_add_user = types.InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
-        b_starosta_del_user = types.InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
+        key_starosta_main_page = InlineKeyboardMarkup()
+        b_starosta_user_info = InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
+        b_start_menu = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_starosta {0}')
+        b_starosta_announcment = InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
+        b_starosta_search_user = InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
+        b_starosta_add_user = InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
+        b_starosta_del_user = InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
         # сюда надо добавить отметки присутствующих
         # todo
 
         key_starosta_main_page.add(b_starosta_announcment)
         key_starosta_main_page.add(b_starosta_user_info)
         key_starosta_main_page.add(b_starosta_search_user, b_starosta_add_user, b_starosta_del_user)
+        key_starosta_main_page.add(b_start_menu)
 
-        await message.answer("💃 <b>Панель старосты</b> 💃"
+        await bot.send_message(user_id, "💃 <b>Панель старосты</b> 💃"
                              f"\n\n◾️ <b>Студентов в группе:</b> <code>{str(students_course_kol)}</code>",
                              reply_markup=key_starosta_main_page)
 
 
 async def f_starosta_main_page_2(user_id, reply):
     if reply == '1':  # обьявление
-        await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать')
+        key_cancel = InlineKeyboardMarkup()
+        b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
+        key_cancel.add(b_starosta_cancel)
+        await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать', reply_markup=key_cancel)
         await Form.s_starosta_announcement.set()
     elif reply == '2':  # отметить
         await Form.s_starosta_note_1.set()
@@ -555,7 +570,6 @@ async def f_starosta_main_page_2(user_id, reply):
 @dp.message_handler(state=Form.s_starosta_announcement)
 async def f_starosta_announcement(announcement: types.Message, state: FSMContext):
     user_id = announcement.from_user.id
-    message = announcement
     announcement = announcement.text
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -565,9 +579,11 @@ async def f_starosta_announcement(announcement: types.Message, state: FSMContext
     for i in spisok_polupokerov:
         if i[0] == user_id:
             await bot.send_message(user_id, f'✅  Сообщение было успешно доставлено.')
-            await f_starosta_main_page(message, user_id)
+            await f_starosta_main_page(user_id, user_id)
         else:
-            await bot.send_message(i[0], f'❗❗❗ Староста вещает ❗❗❗\n\n{announcement}')
+            pass
+            # todo тут просто надо раскомментировать при запуске бота
+            # await bot.send_message(i[0], f'❗❗❗ Староста вещает ❗❗❗\n\n{announcement}')
     # todo
     # сделать кнопку (закрепить?), если человек нажмет, то бот закрепит сообщение
     conn.close()
@@ -576,17 +592,17 @@ async def f_starosta_announcement(announcement: types.Message, state: FSMContext
 
 # todo
 # это для создания групп по интересам
-@dp.message_handler(commands=['test'])
-async def test(message: types.Message):
-    conn = sqlite3.connect('db.db')
-    user_id = message.from_user.id
-    cursor = conn.cursor()
-    check = cursor.execute('SELECT groups FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
-    check = check.split('/split.,&!/')
-    if '1' in check:
-        print('ура, обьект найден')
-    await bot.send_message(user_id, f'{check}')
-    conn.close()
+# @dp.message_handler(commands=['test'])
+# async def test(message: types.Message):
+#     conn = sqlite3.connect('db.db')
+#     user_id = message.from_user.id
+#     cursor = conn.cursor()
+#     check = cursor.execute('SELECT groups FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
+#     check = check.split('/split.,&!/')
+#     if '1' in check:
+#         print('ура, обьект найден')
+#     await bot.send_message(user_id, f'{check}')
+#     conn.close()
 
 
 @dp.message_handler(state=Form.s_starosta_note_1)
@@ -679,10 +695,22 @@ async def query_handler(query: types.CallbackQuery):
 
     elif query.data.startswith('c_starosta'):
         reply = query.data.split(' ')[1]
-        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
+        user_id = query.from_user.id
+        username = query.from_user.username
+        user_status = await f_user_verify(user_id, username, query.message)
         if user_status >= 3:
-            await f_delete_this_message(query.message)
-            await f_starosta_main_page_2(query.from_user.id, reply)
+            if reply == '0':
+                await start_message_1(user_id, username)
+                await f_delete_this_message(query.message)
+            elif reply == 'cancel':
+                user_id = query.from_user.id
+                user_status = await get_user_status(user_id)
+                await dp.current_state(user=user_id).finish()
+                await f_starosta_main_page(user_status, query.from_user.id)
+                await f_delete_this_message(query.message)
+            else:
+                await f_starosta_main_page_2(query.from_user.id, reply)
+                await f_delete_this_message(query.message)
 
     elif query.data.startswith('c_add_user_true'):
         chat_id = query.message.chat.id
