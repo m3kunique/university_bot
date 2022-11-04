@@ -64,6 +64,7 @@ class Form(StatesGroup):
 async def f_delete_this_message(message):
     await bot.delete_message(message.chat.id, message.message_id)
 
+
 async def get_user_status(user_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -180,7 +181,7 @@ async def start_message_1(user_id, username):
     user_status = await get_user_status(user_id)
     if user_status == 0:
         await bot.send_message(user_id, f'⛔️ ВЫ ЗАБАНЕНЫ'
-                             f'\n\n   Ну а если вы просто не зарегистрированы, то обратитесь к старосте группы')
+                                        f'\n\n   Ну а если вы просто не зарегистрированы, то обратитесь к старосте группы')
     elif user_status >= 1:
         cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
         info = cursor.fetchone()
@@ -202,15 +203,15 @@ async def start_message_1(user_id, username):
         key_start_message.row(b_setting)
         if user_status != 0:
             await bot.send_message(user_id, f"Привет, {username}"
-                                 f"\n\nПодписка: <b>{l_sub_status.get(sub)}</b>"
-                                 f"\nАктивна до: <b>{sub_date}</b>"
-                                 f"\n-----------------"
-                                 f"\n💎 Информация о тебе 💎"
-                                 f"\n<b>🆔 ID:</b> <code>{user_id}</code>"
-                                 f"\n<b>📝 ФИО:</b> <code>{FIO}</code>"
-                                 f"\n<b>👥 Курс:</b> <code>{course}</code>"
-                                 f"\n<b>🧠 Статус:</b> <code>{l_user_status.get(user_status)}</code>",
-                                 reply_markup=key_start_message)
+                                            f"\n\nПодписка: <b>{l_sub_status.get(sub)}</b>"
+                                            f"\nАктивна до: <b>{sub_date}</b>"
+                                            f"\n-----------------"
+                                            f"\n💎 Информация о тебе 💎"
+                                            f"\n<b>🆔 ID:</b> <code>{user_id}</code>"
+                                            f"\n<b>📝 ФИО:</b> <code>{FIO}</code>"
+                                            f"\n<b>👥 Курс:</b> <code>{course}</code>"
+                                            f"\n<b>🧠 Статус:</b> <code>{l_user_status.get(user_status)}</code>",
+                                   reply_markup=key_start_message)
         else:
             await bot.send_message(user_id, "⛔️ <b>Доступ запрещен</b>")
         conn.close()
@@ -289,7 +290,7 @@ async def f_homework_panel_main(message: types.Message):
     conn.close()
 
 
-async def f_homework_edit(user_id, chat_id):
+async def f_homework_edit(user_id, chat_id, remover):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,))  # получаем группу
@@ -300,25 +301,26 @@ async def f_homework_edit(user_id, chat_id):
     for i in names_all:
         if i[0] not in names:
             names.append(i[0])
-    key_list_panel = InlineKeyboardMarkup()
-    spisok = {j:InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=1)}
-    if len(spisok) > 5:
-        key_list_panel.add(spisok[1],spisok[2],spisok[3])
-        key_list_panel.add(spisok[4],spisok[5])
-        key_list_panel.add(InlineKeyboardButton(f'Показать остальные дз', callback_data='c_next'))
-        for i in range(1,6):
-            spisok.pop(i)
-    elif len(spisok) == 5:
-        key_list_panel.add(spisok[1], spisok[2], spisok[3])
-        key_list_panel.add(spisok[4], spisok[5])
+    keybord = InlineKeyboardMarkup()
+    keybord.row_width = 3
+    spisok = {j: InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=0)}
+    length = len(spisok)
+    next = InlineKeyboardButton('➡ Дальше', callback_data=f'c_reference next {length}')
+    back = InlineKeyboardButton('◀ Назад', callback_data=f'c_reference back {length}')
+    if length <= 6:
+        keybord.add(*spisok.values())
     else:
-        for i in range(1, len(spisok)+1):
-            key_list_panel.add(spisok[i])
+        for i in range(7, length):
+            spisok.pop(i)
+        keybord.add(*spisok.values())
+        keybord.add(back, next)
+    #     todo надо в калбеках прописать логику
+
+    await bot.send_message(chat_id=chat_id, text='Выберете домашнее задание для редактирования',
+                           reply_markup=keybord)
     #     todo
     # сделать показ остальных дз
-    await bot.send_message(chat_id=chat_id, text='Выберете домашнее задание для редактирования',
-                           reply_markup=key_list_panel)
-    conn.close()
+
 
 
 async def f_homework_edit_1(homework, user_id, chat_id):
@@ -335,7 +337,8 @@ async def f_homework_edit_1(homework, user_id, chat_id):
         id_of_homework = cursor.execute(
             f"SELECT id FROM homework WHERE (course LIKE '%{course}%') AND (text LIKE '%{text_all[i][0]}%')").fetchone()
         await bot.send_message(chat_id, text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
-                               reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Редактировать',callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+                               reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Редактировать',
+                                                                                            callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
     #     todo
     # сделать так, чтобы можно было лично для себя отмечать сделанные дз (это можно реализовать по уникальному id дз)
     # у дз сделать строку в бд, в которой будет количество людей, кто выполнил это дз, и типо если количество
@@ -534,22 +537,23 @@ async def f_starosta_main_page(user_status, user_id):
     if user_status == 3 or user_status >= 5:
         key_starosta_main_page = InlineKeyboardMarkup()
         b_starosta_user_info = InlineKeyboardButton('⬇️ ---Студенты--- ⬇️', callback_data='pass')
+        b_starosta_user_back = InlineKeyboardButton('⬇️ ---Главное меню--- ⬇️', callback_data='pass')
         b_start_menu = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_starosta {0}')
         b_starosta_announcment = InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
         b_starosta_search_user = InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
         b_starosta_add_user = InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
         b_starosta_del_user = InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
-        # сюда надо добавить отметки присутствующих
-        # todo
+        # todo надо добавить назначение ответственных за дз
 
-        key_starosta_main_page.add(b_starosta_announcment)
         key_starosta_main_page.add(b_starosta_user_info)
+        key_starosta_main_page.add(b_starosta_announcment)
         key_starosta_main_page.add(b_starosta_search_user, b_starosta_add_user, b_starosta_del_user)
+        key_starosta_main_page.add(b_starosta_user_back)
         key_starosta_main_page.add(b_start_menu)
 
         await bot.send_message(user_id, "💃 <b>Панель старосты</b> 💃"
-                             f"\n\n◾️ <b>Студентов в группе:</b> <code>{str(students_course_kol)}</code>",
-                             reply_markup=key_starosta_main_page)
+                                        f"\n\n◾️ <b>Студентов в группе:</b> <code>{str(students_course_kol)}</code>",
+                                        reply_markup=key_starosta_main_page)
 
 
 async def f_starosta_main_page_2(user_id, reply):
@@ -634,94 +638,93 @@ async def f_starosta_note_3(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda call: True, state='*')
-async def query_handler(query: types.CallbackQuery):
-    if query.data.startswith('c_timetable_now'):
-        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
+async def query_handler(call: types.CallbackQuery):
+    if call.data.startswith('c_timetable_now'):
+        user_status = await f_user_verify(call.from_user.id, call.from_user.username, call.message)
         if user_status != 0:
-            day_id = query.data.split(' ')[1]
-            course = query.data.split(' ')[2]
+            day_id = call.data.split(' ')[1]
+            course = call.data.split(' ')[2]
             start_time = d(2022, 8, 29)
             today = d.today()
             week_count = ((abs(today - start_time)).days // 7 + 1) % 2
             if (day_id == "1") or (day_id == "2"):
-                await f_timetable_today(query.message, course, day_id, today, week_count)
+                await f_timetable_today(call.message, course, day_id, today, week_count)
             else:
-                await f_timetable_week(query.message, course, week_count)
-            await f_delete_this_message(query.message)
+                await f_timetable_week(call.message, course, week_count)
+            await f_delete_this_message(call.message)
         else:
             pass
 
-    elif query.data == 'c_add_user':
-        user_status = await f_user_verify(query.from_user.id, query.from_user.username, query.message)
+    elif call.data == 'c_add_user':
+        user_status = await f_user_verify(call.from_user.id, call.from_user.username, call.message)
         if user_status >= 5:
-            await f_delete_this_message(query.message)
-            await query.message.answer("Введите ID")
+            await f_delete_this_message(call.message)
+            await call.message.answer("Введите ID")
             await Form.s_add_user.set()
         else:
             pass
 
-    elif query.data == 'c_add_homework':
-        await query.message.answer('Введите предмет')
-        await f_delete_this_message(query.message)
+    elif call.data == 'c_add_homework':
+        await call.message.answer('Введите предмет')
+        await f_delete_this_message(call.message)
         await Form.s_add_homework_1.set()
 
-    elif query.data == 'c_edit_homework':
+    elif call.data == 'c_edit_homework':
+        await f_delete_this_message(call.message)
+        user_id = call.from_user.id
+        chat_id = call.message.chat.id
+        await f_homework_edit(user_id, chat_id, 0)
 
-        await f_delete_this_message(query.message)
-        user_id = query.from_user.id
-        chat_id = query.message.chat.id
-        await f_homework_edit(user_id, chat_id)
-
-    elif query.data.startswith('c_reference'):  # Это ссылка на редактирование дз
-        await f_delete_this_message(query.message)
-        homework = query.data.split(' ')[1]
-        user_id = query.from_user.id
-        chat_id = query.message.chat.id
+    elif call.data.startswith('c_reference'):  # Это ссылка на редактирование дз
+        await f_delete_this_message(call.message)
+        homework = call.data.split(' ')[1]
+        user_id = call.from_user.id
+        chat_id = call.message.chat.id
         await f_homework_edit_1(homework, user_id, chat_id)
 
-    elif query.data.startswith('c_edit_homework_1'):  # редактирование дз
-        user_id = query.from_user.id
-        chat_id = query.message.chat.id
-        await f_delete_this_message(query.message)
-        id_of_homework = query.data.split(' ')[1]
+    elif call.data.startswith('c_edit_homework_1'):  # редактирование дз
+        user_id = call.from_user.id
+        chat_id = call.message.chat.id
+        await f_delete_this_message(call.message)
+        id_of_homework = call.data.split(' ')[1]
         await f_homework_edit_2(id_of_homework, user_id, chat_id)
 
-    elif query.data == 'c_search_user':  # НЕДОДЕЛАНО, ТУТ НАДА ДОБАВЛЕНИЕ, УДАЛЕНИЕ И РЕДАКТИРОВАНИЕ УЧАСТНИКОВ ГРУППЫ
+    elif call.data == 'c_search_user':  # НЕДОДЕЛАНО, ТУТ НАДА ДОБАВЛЕНИЕ, УДАЛЕНИЕ И РЕДАКТИРОВАНИЕ УЧАСТНИКОВ ГРУППЫ
         #  todo
         pass
 
-    elif query.data == 'c_next':
-        await bot.send_message(query.message.chat.id, text=f'ты дурак :)\n\nдобавь сюда что-то (колбек _next)')
+    elif call.data == 'c_next':
+        await bot.send_message(call.message.chat.id, text=f'ты дурак :)\n\nдобавь сюда что-то (колбек _next)')
 
-    elif query.data.startswith('c_starosta'):
-        reply = query.data.split(' ')[1]
-        user_id = query.from_user.id
-        username = query.from_user.username
-        user_status = await f_user_verify(user_id, username, query.message)
+    elif call.data.startswith('c_starosta'):
+        reply = call.data.split(' ')[1]
+        user_id = call.from_user.id
+        username = call.from_user.username
+        user_status = await f_user_verify(user_id, username, call.message)
         if user_status >= 3:
             if reply == '0':
                 await start_message_1(user_id, username)
-                await f_delete_this_message(query.message)
+                await f_delete_this_message(call.message)
             elif reply == 'cancel':
-                user_id = query.from_user.id
+                user_id = call.from_user.id
                 user_status = await get_user_status(user_id)
                 await dp.current_state(user=user_id).finish()
-                await f_starosta_main_page(user_status, query.from_user.id)
-                await f_delete_this_message(query.message)
+                await f_starosta_main_page(user_status, call.from_user.id)
+                await f_delete_this_message(call.message)
             else:
-                await f_starosta_main_page_2(query.from_user.id, reply)
-                await f_delete_this_message(query.message)
+                await f_starosta_main_page_2(call.from_user.id, reply)
+                await f_delete_this_message(call.message)
 
-    elif query.data.startswith('c_add_user_true'):
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-        await f_delete_this_message(query.message)
-        dati = query.data.split(' ')[1]
+    elif call.data.startswith('c_add_user_true'):
+        chat_id = call.message.chat.id
+        user_id = call.from_user.id
+        await f_delete_this_message(call.message)
+        dati = call.data.split(' ')[1]
         await f_add_user_true(dati, chat_id, dp.current_state(user=user_id))
 
 
-    elif query.data == 'c_user_setting':
-        await f_delete_this_message(query.message)
+    elif call.data == 'c_user_setting':
+        await f_delete_this_message(call.message)
 
 
 # А эта движуха отслеживает ошибки и не дает боту упасть, если будет ошибка отправит ее в чат архива
