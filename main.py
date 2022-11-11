@@ -55,6 +55,7 @@ class Form(StatesGroup):
     s_add_user_6 = State()
     s_add_user_true = State()
     s_starosta_announcement = State()
+    s_starosta_poll = State()
     s_add_homework_1 = State()
     s_starosta_note_1 = State()
     s_starosta_note_2 = State()
@@ -136,17 +137,18 @@ async def f_password(message: types.Message, state: FSMContext):
             name = [line.rstrip() for line in name]
             name = f'{name[0]} {name[1]} {name[2]}'
             info = r.find_all(class_='card-subtitle')
-            # DOB = info[1].text
+            DOB = info[1].text
             # education_level = info[2].text
             course = info[3].text
             conn = sqlite3.connect('db.db', check_same_thread=False)
             cursor = conn.cursor()
             user_id = message.from_user.id
             username = message.from_user.username
-            cursor.execute('INSERT INTO users (user_id, username, FIO, course, sub, sub_date, status, login, password) '
-                           'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                           (user_id, username, name, course,
-                            0, None, 1, datas['username'], datas['password']))
+            cursor.execute(
+                'INSERT INTO users (user_id, username, FIO, DOB, course, sub, sub_date, status, login, password) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (user_id, username, name, DOB, course,
+                 0, None, 1, datas['username'], datas['password']))
             await bot.edit_message_text(text='🏅  Вы успешно зарегистрированы  🏅', message_id=ans.message_id,
                                         chat_id=message.chat.id)
             conn.commit()
@@ -186,9 +188,9 @@ async def start_message_1(user_id, username):
         cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
         info = cursor.fetchone()
         FIO = info[3]
-        course = info[4]
-        sub = info[5]
-        sub_date = info[6]
+        course = info[5]
+        sub = info[6]
+        sub_date = info[7]
         rez = cursor.execute("SELECT course FROM courses WHERE course=?", (course,)).fetchall()
         if not rez:
             cursor.execute(f'''INSERT INTO courses (course) VALUES ('{course}')''')
@@ -260,37 +262,32 @@ async def f_timetable_week(message: types.Message, course, week_count):  # па�
 
 @dp.message_handler(commands=['homework'])
 async def f_homework_panel_main_1(message: types.Message):
-    await f_homework_panel_main(message)
+    user_status = await f_user_verify(message.from_user.id, message.from_user.username, message)
+    if user_status > 0:
+        await f_homework_panel_main(message.from_user.id,user_status)
+    else:
+        await bot.send_message(message.chat.id, text='ВЫ ЗАБАНЕНЫ')
 
 
-async def f_homework_panel_main(message: types.Message):
+async def f_homework_panel_main(user_id,user_status):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    user_id = message.from_user.id
-    cursor.execute("SELECT status FROM users WHERE user_id=?", (user_id,))  # получаем статус из бд
-    user_status = cursor.fetchone()[0]
     cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,))  # получаем группу
     course = cursor.fetchone()[0]
     homework_kol = cursor.execute("SELECT COUNT(*) FROM homework WHERE course=?", (course,)).fetchone()[0]
-    if user_status >= 2:
-        key_homework_panel = InlineKeyboardMarkup()
+    key_homework_panel = InlineKeyboardMarkup()
+    b_show_homework = InlineKeyboardButton('Посмотреть домашние задания', callback_data='c_show_homework')
+    if user_status > 1:
         b_add_homework = InlineKeyboardButton('Добавить домашнее задание', callback_data='c_add_homework')
-        b_edit_homework = InlineKeyboardButton('Редактировать существующие', callback_data='c_edit_homework')
-        b_check_homework = InlineKeyboardButton('Посмотреть домашнее задание', callback_data='c_check_homework')
+        b_edit_homework = InlineKeyboardButton('Редактировать существующие', callback_data='c_show_homework')
         key_homework_panel.add(b_add_homework, b_edit_homework)
-        key_homework_panel.add(b_check_homework)
-        await message.answer("📔️   --- <b>ПАНЕЛЬ ДОМАШКИ</b> ---   📔️" +
-                             f"\nДомашки в вашей группе: {str(homework_kol)}", reply_markup=key_homework_panel)
-    elif user_status == 1:
-        key_homework_panel = InlineKeyboardMarkup()
-        b_check_homework = InlineKeyboardButton('Посмотреть домашнее задание', callback_data='c_check_homework')
-        key_homework_panel.add(b_check_homework)
-    else:
-        await bot.send_message(message.chat.id, text='У вас недостаточно прав для просмотра команды')
+    key_homework_panel.add(b_show_homework)
+    await bot.send_message(user_id, "📔️   --- <b>ПАНЕЛЬ ДОМАШКИ</b> ---   📔️" +
+                           f"\nДомашки в вашей группе: {str(homework_kol)}", reply_markup=key_homework_panel)
     conn.close()
 
 
-async def f_homework_edit(user_id, chat_id, remover):
+async def f_pagination(user_id, current_page, message_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,))  # получаем группу
@@ -304,41 +301,91 @@ async def f_homework_edit(user_id, chat_id, remover):
     keybord = InlineKeyboardMarkup()
     keybord.row_width = 3
     spisok = {j: InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=0)}
+    full_length = len(spisok)
+    last_page = math.ceil(full_length / 6)
+    length = full_length - current_page * 6
+    pass_ = InlineKeyboardButton(' ', callback_data='pass')
+    back = InlineKeyboardButton('⬅', callback_data=f'c_pagination back {current_page}')
+    page = InlineKeyboardButton(f'{current_page}/{last_page}', callback_data='pass')
+    next = InlineKeyboardButton('➡', callback_data=f'c_pagination next {current_page}')
+    if current_page == 1:
+        for i in range(6, full_length):
+            del spisok[i]
+        keybord.add(*spisok.values())
+        keybord.add(pass_, page, next)
+    elif current_page == last_page:
+        if full_length % 6 == 0:
+            length = full_length - 6
+        else:
+            length = full_length - full_length // 6
+        for i in range(0, length):
+            spisok.pop(i)
+        keybord.add(*spisok.values())
+        keybord.add(back, page, pass_)
+    else:
+        for i in range(0, length):
+            spisok.pop(i)
+        for i in range(length + 6, full_length):
+            spisok.pop(i)
+        keybord.add(*spisok.values())
+        keybord.add(back, page, next)
+
+    await bot.edit_message_text(chat_id=user_id, message_id=message_id,
+                                text='Выберете предмет', reply_markup=keybord)
+    conn.close()
+
+
+async def f_homework_page(user_id):
+    conn = sqlite3.connect('db.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,))
+    course = cursor.fetchone()[0]
+    cursor.execute("SELECT class FROM homework WHERE course=?", (course,))  # получаем все названия
+    names_all = cursor.fetchall()
+    names = []
+    for i in names_all:
+        if i[0] not in names:
+            names.append(i[0])
+    keybord = InlineKeyboardMarkup()
+    keybord.row_width = 3
+    spisok = {j: InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=0)}
     length = len(spisok)
-    next = InlineKeyboardButton('➡ Дальше', callback_data=f'c_reference next {length}')
-    back = InlineKeyboardButton('◀ Назад', callback_data=f'c_reference back {length}')
+    pass_ = InlineKeyboardButton(' ', callback_data='pass')
+    page = InlineKeyboardButton(f'1/{math.ceil(length / 6)}', callback_data='pass')
+    next = InlineKeyboardButton('➡', callback_data=f'c_reference next {length}')
     if length <= 6:
         keybord.add(*spisok.values())
     else:
-        for i in range(7, length):
+        length = length - length % 6
+        for i in range(6, length-1, -1):
             spisok.pop(i)
         keybord.add(*spisok.values())
-        keybord.add(back, next)
-    #     todo надо в калбеках прописать логику
+        keybord.add(pass_, page, next)
 
-    await bot.send_message(chat_id=chat_id, text='Выберете домашнее задание для редактирования',
-                           reply_markup=keybord)
-    #     todo
-    # сделать показ остальных дз
+    await bot.send_message(chat_id=user_id, text='Выберете предмет', reply_markup=keybord)
+    conn.close()
 
 
-
-async def f_homework_edit_1(homework, user_id, chat_id):
+async def f_homework_show(homework, user_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
+    cursor.execute("SELECT status FROM users WHERE user_id=?", (user_id,))
+    user_status = cursor.fetchone()[0]
     cursor.execute("SELECT course FROM users WHERE user_id=?", (user_id,))  # получаем группу
     course = cursor.fetchone()[0]
-    cursor.execute(
-        f"SELECT text FROM homework WHERE (course LIKE '%{course}%') AND (class LIKE '%{homework}%')  ")  # текст дз
+    cursor.execute(f"SELECT text FROM homework WHERE (course LIKE '%{course}%') AND (class LIKE '%{homework}%')  ")  # текст дз
     text_all = cursor.fetchall()
-    date_of_creation = cursor.execute(
-        f"SELECT date_of_creation FROM homework WHERE (course LIKE '%{course}%') AND (class LIKE '%{homework}%')").fetchone()
+    date_of_creation = cursor.execute(f"SELECT date_of_creation FROM homework WHERE (course LIKE '%{course}%') AND (class LIKE '%{homework}%')").fetchone()
     for i in range(len(text_all)):
-        id_of_homework = cursor.execute(
-            f"SELECT id FROM homework WHERE (course LIKE '%{course}%') AND (text LIKE '%{text_all[i][0]}%')").fetchone()
-        await bot.send_message(chat_id, text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
+        id_of_homework = cursor.execute(f"SELECT id FROM homework WHERE (course LIKE '%{course}%') AND (text LIKE '%{text_all[i][0]}%')").fetchone()
+        if user_status > 1:
+            await bot.send_message(user_id, text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
                                reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Редактировать',
-                                                                                            callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+                               callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+        elif user_status == 1:
+            await bot.send_message(user_id,
+                                   text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
+                                   reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton))
     #     todo
     # сделать так, чтобы можно было лично для себя отмечать сделанные дз (это можно реализовать по уникальному id дз)
     # у дз сделать строку в бд, в которой будет количество людей, кто выполнил это дз, и типо если количество
@@ -346,11 +393,11 @@ async def f_homework_edit_1(homework, user_id, chat_id):
     conn.close()
 
 
-async def f_homework_edit_2(id_of_homework, user_id, chat_id):
-    await bot.send_message(chat_id, f'{id_of_homework[0]}')
+async def f_homework_edit_1(id_of_homework, user_id): #todo
+    await bot.send_message(user_id, f'{id_of_homework[0]}')
 
 
-@dp.message_handler(state='s_add_homework_1')  # надо доделать
+@dp.message_handler(state='s_add_homework_1')  # todo надо доделать
 async def homework_step_1(message: types.Message, state: FSMContext):
     with state.proxy() as data:
         data['class'] = message.text
@@ -498,10 +545,10 @@ async def f_add_user_6(message: types.Message, state: FSMContext):
                              reply_markup=markup)
 
 
-async def f_add_user_true(dati, chat_id, state: FSMContext):
+async def f_add_user_true(dati, user_id, state: FSMContext):
     async with state.proxy() as data:
         if dati == '0':
-            await bot.send_message(chat_id, 'Отменено успешно')
+            await bot.send_message(user_id, 'Отменено успешно')
         else:
             conn = sqlite3.connect('db.db', check_same_thread=False)
             cursor = conn.cursor()
@@ -511,7 +558,7 @@ async def f_add_user_true(dati, chat_id, state: FSMContext):
                             data['add_user_sub'], data['add_user_sub_date'],
                             data['add_user_status']))  # добавление новой строки в бд
             conn.commit()
-            await bot.send_message(chat_id, '✅ Сохранено!'
+            await bot.send_message(user_id, '✅ Сохранено!'
                                             f"\n\n<b> ID:</b> {data['add_user_id']}"
                                             f"\n<b> FIO:</b> {data['add_user_FIO']}"
                                             f"\n<b> Course:</b> {data['add_user_course']}"
@@ -540,9 +587,10 @@ async def f_starosta_main_page(user_status, user_id):
         b_starosta_user_back = InlineKeyboardButton('⬇️ ---Главное меню--- ⬇️', callback_data='pass')
         b_start_menu = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_starosta {0}')
         b_starosta_announcment = InlineKeyboardButton('❗ Сделать объявление', callback_data=f'c_starosta {1}')
-        b_starosta_search_user = InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {2}')
-        b_starosta_add_user = InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {3}')
-        b_starosta_del_user = InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {4}')
+        b_starosta_poll = InlineKeyboardButton('📊  Создать опрос группы', callback_data=f'c_staorosta {2}')
+        b_starosta_search_user = InlineKeyboardButton('️🔎 Отметить (не сделано)', callback_data=f'c_starosta {3}')
+        b_starosta_add_user = InlineKeyboardButton('➕ Добавить (не сделано)', callback_data=f'c_starosta {4}')
+        b_starosta_del_user = InlineKeyboardButton('🗑 Удалить (не сделано)', callback_data=f'c_starosta {5}')
         # todo надо добавить назначение ответственных за дз
 
         key_starosta_main_page.add(b_starosta_user_info)
@@ -553,7 +601,7 @@ async def f_starosta_main_page(user_status, user_id):
 
         await bot.send_message(user_id, "💃 <b>Панель старосты</b> 💃"
                                         f"\n\n◾️ <b>Студентов в группе:</b> <code>{str(students_course_kol)}</code>",
-                                        reply_markup=key_starosta_main_page)
+                               reply_markup=key_starosta_main_page)
 
 
 async def f_starosta_main_page_2(user_id, reply):
@@ -561,13 +609,19 @@ async def f_starosta_main_page_2(user_id, reply):
         key_cancel = InlineKeyboardMarkup()
         b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
         key_cancel.add(b_starosta_cancel)
-        await bot.send_message(user_id, 'Напишите объявление которое вы хотите сделать', reply_markup=key_cancel)
+        await bot.send_message(user_id, 'Введите объявление', reply_markup=key_cancel)
         await Form.s_starosta_announcement.set()
-    elif reply == '2':  # отметить
+    elif reply == '2': #сделать опрос группы
+        key_cancel = InlineKeyboardMarkup()
+        b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
+        key_cancel.add(b_starosta_cancel)
+        await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_cancel)
+        await Form.s_starosta_poll.set()
+    elif reply == '3':  # отметить
         await Form.s_starosta_note_1.set()
-    elif reply == '3':  # добавить
+    elif reply == '4':  # добавить
         pass
-    elif reply == '4':  # удалить
+    elif reply == '5':  # удалить
         pass
 
 
@@ -592,6 +646,41 @@ async def f_starosta_announcement(announcement: types.Message, state: FSMContext
     # сделать кнопку (закрепить?), если человек нажмет, то бот закрепит сообщение
     conn.close()
     await state.finish()
+
+
+@dp.message_handler(state=Form.s_starosta_poll)
+async def f_starosta_poll(poll: types.Message, state: FSMContext):
+    user_id = poll.from_user.id
+    username = poll.from_user.username
+    poll = poll.text
+    conn = sqlite3.connect('db.db', check_same_thread=False)
+    cursor = conn.cursor()
+    group = cursor.execute('SELECT course FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
+    cursor.execute('INSERT INTO polls (group, name) VALUES (?, ?)', (group, poll))
+    conn.commit()
+    conn.close()
+    await f_starosta_poll_1(poll, user_id,username)
+
+
+async def f_starosta_poll_1(poll, user_id,username):
+    # todo надо сделать так, чтобы староста мог поставить таймер, когда придут результаты
+    conn = sqlite3.connect('db.db', check_same_thread=False)
+    cursor = conn.cursor()
+    course = cursor.execute('SELECT course FROM users WHERE user_id =?', (user_id,)).fetchone()[0]
+    spisok_polupokerov = cursor.execute('SELECT user_id FROM users WHERE course =? AND status > 0',
+                                        (course,)).fetchall()
+    poll_id = cursor.execute(f'SELECT id FROM polls WHERE name = {poll} AND WHERE group = {course}')
+    key_poll = InlineKeyboardMarkup()
+    b_starosta_poll = InlineKeyboardButton('', callback_data=f'c_starosta {poll_id}')
+    key_poll.add(b_starosta_poll)
+    for i in spisok_polupokerov:
+        if i[0] == user_id:
+            await bot.send_message(user_id, f'✅  Люди были успешно опрошены.')
+            await f_starosta_main_page(user_id, user_id)
+        else:
+            await bot.send_message(i[0], f'📊📊📊 ОПРОС 📊📊📊 {poll}', reply_markup=key_poll)
+    conn.close()
+    await start_message_1(user_id, username)
 
 
 # todo
@@ -669,25 +758,38 @@ async def query_handler(call: types.CallbackQuery):
         await f_delete_this_message(call.message)
         await Form.s_add_homework_1.set()
 
-    elif call.data == 'c_edit_homework':
-        await f_delete_this_message(call.message)
+    elif call.data == 'c_show_homework':
         user_id = call.from_user.id
-        chat_id = call.message.chat.id
-        await f_homework_edit(user_id, chat_id, 0)
+        await f_homework_page(user_id)
+        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_reference'):  # Это ссылка на редактирование дз
-        await f_delete_this_message(call.message)
-        homework = call.data.split(' ')[1]
+        reply = call.data.split(' ')[1]
         user_id = call.from_user.id
-        chat_id = call.message.chat.id
-        await f_homework_edit_1(homework, user_id, chat_id)
+        user_status = await get_user_status(user_id)
+        if reply == 'next':
+            page = 2
+            await f_pagination(user_id, page, call.message.message_id)
+        else:
+            if user_status > 1:
+                await f_homework_show(reply, user_id)
+            await f_delete_this_message(call.message)
+
+    elif call.data.startswith('c_pagination'):
+        user_id = call.from_user.id
+        reply = call.data.split(' ')[1]
+        if reply == 'back':
+            page = int(call.data.split(' ')[2]) - 1
+            await f_pagination(user_id, page, call.message.message_id)
+        elif reply == 'next':
+            page = int(call.data.split(' ')[2]) + 1
+            await f_pagination(user_id, page, call.message.message_id)
 
     elif call.data.startswith('c_edit_homework_1'):  # редактирование дз
         user_id = call.from_user.id
-        chat_id = call.message.chat.id
         await f_delete_this_message(call.message)
         id_of_homework = call.data.split(' ')[1]
-        await f_homework_edit_2(id_of_homework, user_id, chat_id)
+        await f_homework_edit_1(id_of_homework, user_id)
 
     elif call.data == 'c_search_user':  # НЕДОДЕЛАНО, ТУТ НАДА ДОБАВЛЕНИЕ, УДАЛЕНИЕ И РЕДАКТИРОВАНИЕ УЧАСТНИКОВ ГРУППЫ
         #  todo
@@ -704,24 +806,18 @@ async def query_handler(call: types.CallbackQuery):
         if user_status >= 3:
             if reply == '0':
                 await start_message_1(user_id, username)
-                await f_delete_this_message(call.message)
             elif reply == 'cancel':
-                user_id = call.from_user.id
-                user_status = await get_user_status(user_id)
                 await dp.current_state(user=user_id).finish()
-                await f_starosta_main_page(user_status, call.from_user.id)
-                await f_delete_this_message(call.message)
+                await f_starosta_main_page(user_status, user_id)
             else:
-                await f_starosta_main_page_2(call.from_user.id, reply)
-                await f_delete_this_message(call.message)
+                await f_starosta_main_page_2(user_id, reply)
+        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_add_user_true'):
-        chat_id = call.message.chat.id
         user_id = call.from_user.id
         await f_delete_this_message(call.message)
         dati = call.data.split(' ')[1]
-        await f_add_user_true(dati, chat_id, dp.current_state(user=user_id))
-
+        await f_add_user_true(dati, user_id, dp.current_state(user=user_id))
 
     elif call.data == 'c_user_setting':
         await f_delete_this_message(call.message)
