@@ -673,17 +673,14 @@ async def f_starosta_main_page(user_status, user_id):
 async def f_starosta_main_page_2(user_id, reply):
     key_starosta = InlineKeyboardMarkup()
     b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
+    key_starosta.add(b_starosta_cancel)
     if reply == '1':  # обьявление
-        key_starosta.add(b_starosta_cancel)
         await bot.send_message(user_id, 'Введите объявление', reply_markup=key_starosta)
         await Form.s_starosta_announcement.set()
     elif reply == '2':  # сделать опрос группы
-        key_starosta.add(b_starosta_cancel)
         await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_starosta)
         await Form.s_starosta_poll.set()
     elif reply == '3':  # отметить
-        key_cancel = InlineKeyboardMarkup()
-        b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
         pass
     elif reply == '4':  # добавить
         pass
@@ -873,8 +870,8 @@ async def f_poll_finsh(poll: Message, state: FSMContext):
             case 3:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=True,allows_multiple_answers=False)
             case 4:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=False,allows_multiple_answers=False)
         mes_id = mes.message_id
-        b_yes = InlineKeyboardButton('Сохранить', query_handler=f'c_poll yes {mes_id}')
-        b_no = InlineKeyboardButton('Заполнить заново', query_handler=f'c_poll no {mes_id}')
+        b_yes = InlineKeyboardButton('Сохранить', query_handler=f'poll yes {mes_id}')
+        b_no = InlineKeyboardButton('Заполнить заново', query_handler=f'poll no {mes_id}')
         key_poll_finish = InlineKeyboardMarkup()
         key_poll_finish.add(b_yes, b_no)
         key_poll_finish.add(b_cancel)
@@ -1024,18 +1021,32 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
     elif call.data == 'c_next':
         await bot.send_message(call.message.chat.id, text=f'ты дурак :)\n\nдобавь сюда что-то (колбек _next)')
 
-    elif call.data.startswith('c_poll'):
+    elif call.data.startswith('poll'):
         reply = call.data.split(' ')[1]
         if reply == 'yes':
-            message_id = call.data.split(' ')[2]
-
+            message_id = int(call.data.split(' ')[2])
+            conn = sqlite3.connect('db.db')
+            cursor = conn.cursor()
+            course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'")
+            spisok_polupokerov = [int(x) for x in cursor.execute(f"SELECT user_id WHERE course='{course}'").fetchall()]
+            for i in spisok_polupokerov:
+                if user_id != i:
+                    await bot.forward_message(i, user_id, message_id,protect_content=True)
+                else:
+                    await bot.answer_callback_query(call.id, 'Успешно доставлено', show_alert=False)
+            conn.close()
         elif reply == 'no':
-            message_id = call.data.split(' ')[2]
+            key_starosta = InlineKeyboardMarkup()
+            b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
+            key_starosta.add(b_starosta_cancel)
+            await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_starosta)
+            await Form.s_starosta_poll.set()
 
-        else:
-            with state.proxy() as data:
-                data['reply'] = reply
-                await Form.s_starosta_poll_1.set()
+    elif call.data.startswith('c_poll'):
+        reply = call.data.split(' ')[1]
+        with state.proxy() as data:
+            data['reply'] = reply
+            await Form.s_starosta_poll_1.set()
         await f_delete_this_message(call.message)
 
     elif call.data == 'c_cancel':
