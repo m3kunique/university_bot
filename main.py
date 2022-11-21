@@ -77,6 +77,17 @@ class Poll(StatesGroup):
     poll_finish = State()
 
 
+async def f_user_delete_true(user_id):
+    key_del = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
+    b_ = InlineKeyboardButton('⬇⬇⬇  Вы уверены?  ⬇⬇⬇', callback_data='pass')
+    b_true = InlineKeyboardButton('🚮 ДА 🚮', callback_data='c_user_delete_true 1')
+    b_false = InlineKeyboardButton('⛩ НЕТ ⛩', callback_data='c_user_delete_true 2')
+    key_del.add(b_)
+    key_del.add(b_true,b_false)
+    await bot.send_message(user_id, 'ВЫ УВЕРЕНЫ???', reply_markup=key_del)
+
+
+
 async def f_delete_this_message(message):
     await bot.delete_message(message.chat.id, message.message_id)
 
@@ -265,7 +276,8 @@ async def f_account_page(user_id, username):
         key_start_message = InlineKeyboardMarkup(resize_keyboard=True, selective=True)  # объявление клавиатуры
         b_back = InlineKeyboardButton('🏡️️ Главное меню', callback_data='c_back_to_menu')
         b_setting = InlineKeyboardButton('⚙ Настройки (не ворк)', callback_data='c_user_setting')
-        key_start_message.add(b_setting)
+        b_delete = InlineKeyboardButton('🗑 Удалить аккаунт', callback_data='c_user_delete')
+        key_start_message.add(b_setting, b_delete)
         key_start_message.add(b_back)
         if user_status != 0:
             await bot.send_message(user_id, f"Привет, {username}"
@@ -962,11 +974,9 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             await f_admin_panel_main(user_id, username)  # todo
         elif reply == 'starosta':
             await f_starosta_main_page_1(user_id, username)
-        await f_delete_this_message(call.message)
 
     elif call.data == 'c_back_to_menu':
         await start_message_1(user_id)
-        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_timetable_now'):
         user_status = await f_user_verify(user_id, username, ' ')
@@ -991,12 +1001,10 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
                 await f_timetable_week(user_id, course, week_count)
         else:
             pass
-        await f_delete_this_message(call.message)
 
     elif call.data == 'c_add_user':
         user_status = await f_user_verify(user_id, username, ' ')
         if user_status >= 5:
-            await f_delete_this_message(call.message)
             await call.message.answer("Введите ID")
             await Form.s_add_user.set()
         else:
@@ -1004,12 +1012,10 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
 
     elif call.data == 'c_add_homework':
         await call.message.answer('Введите предмет')
-        await f_delete_this_message(call.message)
         await Form.s_add_homework_1.set()
 
     elif call.data == 'c_show_homework':
         await f_homework_page(user_id)
-        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_reference'):  # Это ссылка на редактирование дз
         reply = call.data.split(' ')[1]
@@ -1020,7 +1026,6 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
         else:
             if user_status > 1:
                 await f_homework_show(reply, user_id)
-            await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_pagination'):
         reply = call.data.split(' ')[1]
@@ -1032,7 +1037,6 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             await f_pagination(user_id, page, call.message.message_id)
 
     elif call.data.startswith('c_edit_homework_1'):  # редактирование дз
-        await f_delete_this_message(call.message)
         id_of_homework = call.data.split(' ')[1]
         await f_homework_edit_1(id_of_homework, user_id)
 
@@ -1050,7 +1054,6 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             data['user_id'] = user_id
             await Form.s_starosta_poll_1.set()
             await f_starosta_poll_1(user_id)
-            await f_delete_this_message(call.message)
 
     elif call.data.startswith('poll'):
         reply = call.data.split(' ')[1]
@@ -1058,13 +1061,16 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             message_id = int(call.data.split(' ')[2])
             conn = sqlite3.connect('db.db')
             cursor = conn.cursor()
-            course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'")
-            spisok_polupokerov = [int(x) for x in cursor.execute(f"SELECT user_id FROM users WHERE (course='{course}') AND (status > 0)").fetchall()]
+            course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'").fetchone()[0]
+            spisok_polupokerov = [int(x[0]) for x in cursor.execute(f"SELECT user_id FROM users WHERE course='{course}'").fetchall()]
             k = 0
             for i in spisok_polupokerov:
                 if i != user_id:
-                    await bot.forward_message(i, user_id, message_id, protect_content=True)
-                    k += 1
+                    try:
+                        await bot.forward_message(i, user_id, message_id, protect_content=True)
+                        k += 1
+                    except:
+                        pass
             await bot.send_message(call.from_user.id, f'Успешно доставлено {k} людям')
             conn.close()
         elif reply == 'no':
@@ -1073,13 +1079,11 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             key_starosta.add(b_starosta_cancel)
             await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_starosta)
             await Form.s_starosta_poll.set()
-        await f_delete_this_message(call.message)
 
     elif call.data == 'c_cancel':
         await dp.current_state(user=user_id).reset_data()
         await dp.current_state(user=user_id).finish()
         await start_message_1(user_id)
-        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_starosta'):
         reply = call.data.split(' ')[1]
@@ -1092,7 +1096,6 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
                 await f_starosta_main_page(user_status, user_id)
             else:
                 await f_starosta_main_page_2(user_id, reply)
-        await f_delete_this_message(call.message)
 
     elif call.data.startswith('c_add_user_true'):
         user_id = call.from_user.id
@@ -1103,11 +1106,27 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             await bot.answer_callback_query(call.id, 'Отменено успешно', show_alert=False)
         else:
             await f_add_user_true(user_id, dp.current_state(user=user_id))
-        await f_delete_this_message(call.message)
 
     elif call.data == 'c_user_setting':
-        await f_delete_this_message(call.message)
+        await bot.answer_callback_query(call.id, 'Данная функция находится в разработке')
+        await start_message_1(user_id)
 
+    elif call.data == 'c_user_delete':
+        await f_user_delete_true(user_id)
+
+    elif call.data.startswith('c_user_delete_true'):
+        reply = call.data.split(' ')[1]
+        if reply == '1':
+            await bot.answer_callback_query(call.id, 'Аккаунт удален успешно')
+            conn = sqlite3.connect('db.db', check_same_thread=False)
+            cursor = conn.cursor()
+            cursor.execute(f'DELETE FROM users WHERE user_id={user_id}')
+            conn.commit()
+            conn.close()
+        else:
+            await start_message_1(user_id)
+
+    await f_delete_this_message(call.message)
 
 # А эта движуха отслеживает ошибки и не дает боту упасть, если будет ошибка отправит ее в чат архива
 while True:
