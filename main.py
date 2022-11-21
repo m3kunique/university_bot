@@ -170,11 +170,11 @@ async def f_password(message: Message, state: FSMContext):
             cursor = conn.cursor()
             user_id = message.from_user.id
             username = message.from_user.username
-            rez = cursor.execute(f'SELECT user_id FROM users WHERE FIO=?', (name,)).fetchone()[0]
-            username_1 = cursor.execute(f'SELECT username FROM users WHERE FIO=?', (name,)).fetchone()[0]
+            rez = cursor.execute(f'SELECT user_id FROM users WHERE FIO=?', (name,)).fetchone()
+            username_1 = cursor.execute(f'SELECT username FROM users WHERE FIO=?', (name,)).fetchone()
             if rez:
                 cursor.execute(f'''UPDATE users SET user_id = ('{rez} {user_id}') WHERE FIO=?''', (name,))
-                cursor.execute(f'''UPDATE users SET username = ('{username_1} {username}') WHERE FIO=?''', (name,))
+                cursor.execute(f'''UPDATE users SET username = ('{username_1[0]} {username}') WHERE FIO=?''', (name,))
             else:
                 cursor.execute(
                     'INSERT INTO users (user_id, username, FIO, DOB, course, sub, sub_date, status, login, password) '
@@ -419,7 +419,7 @@ async def f_pagination(user_id, current_page, message_id):
 async def f_homework_page(user_id):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute("SELECT course FROM users WHERE user_id='{user_id}'")
+    cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'")
     course = cursor.fetchone()[0]
     cursor.execute("SELECT class FROM homework WHERE course=?", (course,))  # получаем все названия
     names_all = cursor.fetchall()
