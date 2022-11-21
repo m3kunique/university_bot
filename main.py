@@ -178,9 +178,9 @@ async def f_password(message: Message, state: FSMContext):
             await state.finish()
             await start_message_1(user_id)
         except Exception as E:
+            print(traceback.print_exc())
             await bot.send_message(config.archive_chat_id,
                                    f'у вас ошибка блять *{E}* вот такая, иди исправляй сука тварь падла мразь')
-            print(traceback.print_exc())
             await bot.send_message(message.chat.id,
                                    'Ты ввел неверный логин или пароль\n\n'
                                    'Если такая хрень написалась после успешной регистрации, '
@@ -232,7 +232,7 @@ async def f_timetable_page(user_id):
         conn = sqlite3.connect('db.db', check_same_thread=False)
         cursor = conn.cursor()
         course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'").fetchone()[0]
-        key_timetable = InlineKeyboardMarkup()  # объявление клавиатуры
+        key_timetable = InlineKeyboardMarkup(resize_keyboard=True, selective=True)  # объявление клавиатуры
         b_back = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_back_to_menu')
         b_timetable_today = InlineKeyboardButton('🟠 на сегодня', callback_data=f'c_timetable_now {1} {course}')
         b_timetable_tomorrow = InlineKeyboardButton('🟢 на завтра', callback_data=f'c_timetable_now {2} {course}')
@@ -262,7 +262,7 @@ async def f_account_page(user_id, username):
         if not rez:
             cursor.execute(f'''INSERT INTO courses (course) VALUES ('{course}')''')
             conn.commit()
-        key_start_message = InlineKeyboardMarkup()  # объявление клавиатуры
+        key_start_message = InlineKeyboardMarkup(resize_keyboard=True, selective=True)  # объявление клавиатуры
         b_back = InlineKeyboardButton('🏡️️ Главное меню', callback_data='c_back_to_menu')
         b_setting = InlineKeyboardButton('⚙ Настройки (не ворк)', callback_data='c_user_setting')
         key_start_message.add(b_setting)
@@ -316,7 +316,7 @@ async def f_timetable_week(user_id, course, week_count):  # парсер рас�
                         elif (a is not None) and (week_count == 1):  # знаменатель
                             if (a.find_parent('td', class_='text-primary')) or (a.find_parent('td', colspan='2')):
                                 string_build += f"""🕰  {j.find('td', class_='bg-grey text-nowrap').text}\n{a.text}\n\n"""
-            key_menu = InlineKeyboardMarkup()
+            key_menu = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
             b_back = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_back_to_menu')
             key_menu.add(b_back)
             await bot.send_message(user_id, f"{string_build}", reply_markup=key_menu)
@@ -342,7 +342,7 @@ async def f_homework_panel_main(user_id, user_status):
     cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'")  # получаем группу
     course = cursor.fetchone()[0]
     homework_kol = cursor.execute("SELECT COUNT(*) FROM homework WHERE course=?", (course,)).fetchone()[0]
-    key_homework_panel = InlineKeyboardMarkup()
+    key_homework_panel = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
     b_show_homework = InlineKeyboardButton('👁 Посмотреть домашние задания', callback_data='c_show_homework')
     b_back = InlineKeyboardButton('🏡️️ Главное меню', callback_data='c_back_to_menu')
     if user_status > 1:
@@ -367,7 +367,7 @@ async def f_pagination(user_id, current_page, message_id):
     for i in names_all:
         if i[0] not in names:
             names.append(i[0])
-    keybord = InlineKeyboardMarkup()
+    keybord = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
     keybord.row_width = 3
     spisok = {j: InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=0)}
     full_length = len(spisok)
@@ -415,7 +415,7 @@ async def f_homework_page(user_id):
     for i in names_all:
         if i[0] not in names:
             names.append(i[0])
-    keybord = InlineKeyboardMarkup()
+    keybord = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
     keybord.row_width = 3
     spisok = {j: InlineKeyboardButton(f'{i}', callback_data=f'c_reference {i}') for j, i in enumerate(names, start=0)}
     length = len(spisok)
@@ -453,12 +453,14 @@ async def f_homework_show(homework, user_id):
         if user_status > 1:
             await bot.send_message(user_id,
                                    text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
-                                   reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton('Редактировать',
-                                                                                                callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
+                                   reply_markup=InlineKeyboardMarkup(resize_keyboard=True, selective=True).add(
+                                       InlineKeyboardButton('Редактировать',
+                                                            callback_data=f'c_edit_homework_1 {id_of_homework[0]}')))
         elif user_status == 1:
             await bot.send_message(user_id,
                                    text=f'\n\n Задание по {homework} от {date_of_creation[0]}\n\n{text_all[i][0]}',
-                                   reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton))
+                                   reply_markup=InlineKeyboardMarkup(resize_keyboard=True, selective=True).add(
+                                       InlineKeyboardButton))
     #     todo
     # сделать так, чтобы можно было лично для себя отмечать сделанные дз (это можно реализовать по уникальному id дз)
     # у дз сделать строку в бд, в которой будет количество людей, кто выполнил это дз, и типо если количество
@@ -472,7 +474,7 @@ async def f_homework_edit_1(id_of_homework, user_id):  # todo
 
 @dp.message_handler(state='s_add_homework_1')  # todo надо доделать
 async def homework_step_1(message: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         data['class'] = message.text
 
 
@@ -511,7 +513,7 @@ async def f_timetable_today(user_id, course, today, week_count):
                     elif (a is not None) and (week_count == 1):  # знаменатель
                         if (a.find_parent('td', class_='text-primary')) or (a.find_parent('td', colspan='2')):
                             string_build += f"""🕰  {j.find('td', class_='bg-grey text-nowrap').text}\n{a.text}\n\n"""
-            key_menu = InlineKeyboardMarkup()
+            key_menu = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
             b_back = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_back_to_menu')
             key_menu.add(b_back)
             await bot.send_message(user_id, f"{string_build}", reply_markup=key_menu)
@@ -525,7 +527,7 @@ async def f_admin_panel_main(user_id, username):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     user_kol = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    key_admin_panel = InlineKeyboardMarkup()
+    key_admin_panel = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
     b_search_user = InlineKeyboardButton('🔎 Поиск юзеров', callback_data='c_search_users')
     b_add_user = InlineKeyboardButton('➕ Добавить юзера', callback_data='c_add_user')
     b_back = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_back_to_menu')
@@ -648,7 +650,7 @@ async def f_starosta_main_page(user_status, user_id):
     user_course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'").fetchone()[0]
     students_course_kol = cursor.execute(f"SELECT COUNT(*) FROM users WHERE course = '{user_course}'").fetchone()[0]
     if user_status == 3 or user_status >= 5:
-        key_starosta_main_page = InlineKeyboardMarkup()
+        key_starosta_main_page = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
         b_starosta_user_info = InlineKeyboardButton('⬇   ——— Студенты ———   ⬇', callback_data='pass')
         b_starosta_user_back = InlineKeyboardButton('⬇   ——— Главное меню ———    ⬇', callback_data='pass')
         b_back = InlineKeyboardButton('🏡 Главное меню', callback_data=f'c_back_to_menu')
@@ -671,14 +673,14 @@ async def f_starosta_main_page(user_status, user_id):
 
 
 async def f_starosta_main_page_2(user_id, reply):
-    key_starosta = InlineKeyboardMarkup()
+    key_starosta = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
     b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
     key_starosta.add(b_starosta_cancel)
     if reply == '1':  # обьявление
         await bot.send_message(user_id, 'Введите объявление', reply_markup=key_starosta)
         await Form.s_starosta_announcement.set()
     elif reply == '2':  # сделать опрос группы
-        await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_starosta)
+        await bot.send_message(user_id, 'Назовите опрос')
         await Form.s_starosta_poll.set()
     elif reply == '3':  # отметить
         pass
@@ -695,14 +697,13 @@ async def f_starosta_announcement(announcement: Message, state: FSMContext):
     conn = sqlite3.connect('db.db', check_same_thread=False)
     cursor = conn.cursor()
     course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'").fetchone()[0]
-    spisok_polupokerov = cursor.execute('SELECT user_id FROM users WHERE course =? AND status > 0',
-                                        (course,)).fetchall()
+    spisok_polupokerov = [int(x) for x in cursor.execute(f"SELECT user_id FROM users WHERE (course='{course}') AND (status > 0)").fetchall()]
     for i in spisok_polupokerov:
-        if i[0] == user_id:
-            await bot.send_message(user_id, f'✅  Сообщение было успешно доставлено.')
-            await f_starosta_main_page(user_id, user_id)
+        if i != user_id:
+            await bot.send_message(i, f'❗❗❗ Староста вещает ❗❗❗\n\n{announcement}')
         else:
-            await bot.send_message(i[0], f'❗❗❗ Староста вещает ❗❗❗\n\n{announcement}')
+            await f_starosta_main_page(user_id, user_id)
+            await bot.send_message(user_id, f'✅  Сообщение было успешно доставлено.')
     # todo
     # сделать кнопку (закрепить?), если человек нажмет, то бот закрепит сообщение
     conn.close()
@@ -711,8 +712,8 @@ async def f_starosta_announcement(announcement: Message, state: FSMContext):
 
 @dp.message_handler(state=Form.s_starosta_poll)  # опрос
 async def f_starosta_poll(poll: Message, state: FSMContext):
-    with state.proxy() as data:
-        key_poll = InlineKeyboardMarkup()
+    async with state.proxy() as data:
+        key_poll = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
         b_poll_1 = InlineKeyboardButton('Много вариантов ответа, анонимный', callback_data=f'c_poll {1}')
         b_poll_2 = InlineKeyboardButton('Много вариантов ответа', callback_data=f'c_poll {2}')
         b_poll_3 = InlineKeyboardButton('Анонимный', callback_data=f'c_poll {3}')
@@ -723,162 +724,183 @@ async def f_starosta_poll(poll: Message, state: FSMContext):
         await bot.send_message(poll.from_user.id, "Выберете вид опроса", reply_markup=key_poll)
 
 
-@dp.message_handler(state=Form.s_starosta_poll_1)
-async def f_starosta_poll_1(state: FSMContext):
-    with state.proxy() as data:
-        await bot.send_message(int(data['user_id']), f'Введите количество вариантов ответа')
-        await Form.s_starosta_poll_2.set()
+async def f_starosta_poll_1(user_id):
+    await bot.send_message(user_id, f'Введите количество вариантов ответа 2-10')
+    await Form.s_starosta_poll_2.set()
 
 
 @dp.message_handler(state=Form.s_starosta_poll_2)
 async def f_starosta_poll_2(poll: Message, state: FSMContext):
+    user_id = poll.from_user.id
     try:
         c = int(poll.text)
         if (c < 11) and (c > 1):
-            with state.proxy() as data:
+            async with state.proxy() as data:
                 data['integer'] = poll.text
-                await Poll.poll_1.set()
+            await bot.send_message(user_id, f'Введите вариант ответа')
+            await Poll.poll_1.set()
         else:
-            await bot.send_message(poll.from_user.id, f'В опросе может быть 2-10 вариантов')
+            await bot.send_message(user_id, f'В опросе может быть 2-10 вариантов')
+            await Form.s_starosta_poll_1.set()
+            await f_starosta_poll_1(poll.from_user.id)
     except:
-        await bot.send_message(poll.from_user.id, 'Введите число')
+        await bot.send_message(user_id, 'Введите число')
         await Form.s_starosta_poll_1.set()
+        await f_starosta_poll_1(poll.from_user.id)
 
 
 @dp.message_handler(state=Poll.poll_1)
 async def f_poll_1(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
+        data['poll'] = f'''{poll.text}'''
         await bot.send_message(user_id, text='Введите следующий вариант ответа')
         await Poll.poll_2.set()
 
 
 @dp.message_handler(state=Poll.poll_2)
 async def f_poll_2(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 2:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_3.set()
 
 
 @dp.message_handler(state=Poll.poll_3)
 async def f_poll_3(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 3:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_4.set()
 
 
 @dp.message_handler(state=Poll.poll_4)
 async def f_poll_4(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 4:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_5.set()
 
 
 @dp.message_handler(state=Poll.poll_5)
 async def f_poll_5(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 5:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_6.set()
 
 
 @dp.message_handler(state=Poll.poll_6)
 async def f_poll_6(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 6:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_7.set()
 
 
 @dp.message_handler(state=Poll.poll_7)
 async def f_poll_7(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 7:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_8.set()
 
 
 @dp.message_handler(state=Poll.poll_8)
 async def f_poll_8(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 8:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_9.set()
 
 
 @dp.message_handler(state=Poll.poll_9)
 async def f_poll_9(poll: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         user_id = poll.from_user.id
-        data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
         if int(data['integer']) == 9:
+            string = poll.text
             await Poll.poll_finish.set()
+            await f_poll_finsh(string, dp.current_state(user=user_id))
         else:
+            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
             await bot.send_message(user_id, f'Введите следующий вариант ответа')
             await Poll.poll_10.set()
 
 
 @dp.message_handler(state=Poll.poll_10)
 async def f_poll_10(poll: Message, state: FSMContext):
-    with state.proxy() as data:
-        if int(data['integer']) > 1:
-            data['poll'] = f'''{data['poll']}@#$0192{poll.text}'''
-            if int(data['integer']) == 10:
-                await Poll.poll_finish.set()
+        string = poll.text
+        await Poll.poll_finish.set()
+        await f_poll_finsh(string, dp.current_state(user=poll.from_user.id))
 
 
-@dp.message_handler(state=Poll.poll_finish)
-async def f_poll_finsh(poll: Message, state: FSMContext):
-    with state.proxy() as data:
-        user_id = poll.from_user.id
-        b_cancel = InlineKeyboardButton('Отменить и вернуться в главное меню', query_handler='c_cancel')
+async def f_poll_finsh(string, state: FSMContext):
+    async with state.proxy() as data:
+        b_cancel = InlineKeyboardButton('Отменить и вернуться в главное меню', callback_data='c_cancel')
+        data['poll'] = data['poll'] + '@#$0192' + string
+        a = data['poll'].split('@#$0192')
+        user_id = data['user_id']
         match int(data['reply']):
-            case 1:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=True,allows_multiple_answers=True)
-            case 2:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=False,allows_multiple_answers=True)
-            case 3:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=True,allows_multiple_answers=False)
-            case 4:mes=await bot.send_poll(user_id, data['name'], data['poll'].split('@#$0192'),is_anonymous=False,allows_multiple_answers=False)
+            case 1:
+                mes = await bot.send_poll(user_id, data['name'], a, is_anonymous=True, allows_multiple_answers=True)
+            case 2:
+                mes = await bot.send_poll(user_id, data['name'], a, is_anonymous=False, allows_multiple_answers=True)
+            case 3:
+                mes = await bot.send_poll(user_id, data['name'], a, is_anonymous=True, allows_multiple_answers=False)
+            case 4:
+                mes = await bot.send_poll(user_id, data['name'], a, is_anonymous=False, allows_multiple_answers=False)
         mes_id = mes.message_id
-        b_yes = InlineKeyboardButton('Сохранить', query_handler=f'poll yes {mes_id}')
-        b_no = InlineKeyboardButton('Заполнить заново', query_handler=f'poll no {mes_id}')
-        key_poll_finish = InlineKeyboardMarkup()
+        b_yes = InlineKeyboardButton('💌 Отправить', callback_data=f'poll yes {mes_id}')
+        b_no = InlineKeyboardButton('🔄 Заполнить заново', callback_data=f'poll no {mes_id}')
+        key_poll_finish = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
         key_poll_finish.add(b_yes, b_no)
         key_poll_finish.add(b_cancel)
-        await bot.send_message(user_id, 'Проверьте правильность заполнения', reply_markup=key_poll_finish)
+        await bot.send_message(user_id, '✍ Проверьте правильность заполнения', reply_markup=key_poll_finish)
         await state.reset_data()
         await state.finish()
-
 
 
 # todo
@@ -910,7 +932,7 @@ async def f_starosta_note_1(message: Message, state: FSMContext):
 
 @dp.message_handler(state=Form.s_starosta_note_2)
 async def f_starosta_note_2(message: Message, state: FSMContext):
-    with state.proxy() as data:
+    async with state.proxy() as data:
         data['subject'] = message.text
         await message.answer("Напишите количество отсутствующих")
         await Form.next()
@@ -919,7 +941,7 @@ async def f_starosta_note_2(message: Message, state: FSMContext):
 @dp.message_handler(state=Form.s_starosta_note_3)
 async def f_starosta_note_3(message: Message, state: FSMContext):
     # todo
-    with state.proxy() as data:
+    async with state.proxy() as data:
         print(data['subject'])
 
 
@@ -1021,6 +1043,15 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
     elif call.data == 'c_next':
         await bot.send_message(call.message.chat.id, text=f'ты дурак :)\n\nдобавь сюда что-то (колбек _next)')
 
+    elif call.data.startswith('c_poll'):
+        reply = call.data.split(' ')[1]
+        async with state.proxy() as data:
+            data['reply'] = reply
+            data['user_id'] = user_id
+            await Form.s_starosta_poll_1.set()
+            await f_starosta_poll_1(user_id)
+            await f_delete_this_message(call.message)
+
     elif call.data.startswith('poll'):
         reply = call.data.split(' ')[1]
         if reply == 'yes':
@@ -1028,25 +1059,20 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             conn = sqlite3.connect('db.db')
             cursor = conn.cursor()
             course = cursor.execute(f"SELECT course FROM users WHERE user_id='{user_id}'")
-            spisok_polupokerov = [int(x) for x in cursor.execute(f"SELECT user_id WHERE course='{course}'").fetchall()]
+            spisok_polupokerov = [int(x) for x in cursor.execute(f"SELECT user_id FROM users WHERE (course='{course}') AND (status > 0)").fetchall()]
+            k = 0
             for i in spisok_polupokerov:
-                if user_id != i:
-                    await bot.forward_message(i, user_id, message_id,protect_content=True)
-                else:
-                    await bot.answer_callback_query(call.id, 'Успешно доставлено', show_alert=False)
+                if i != user_id:
+                    await bot.forward_message(i, user_id, message_id, protect_content=True)
+                    k += 1
+            await bot.send_message(call.from_user.id, f'Успешно доставлено {k} людям')
             conn.close()
         elif reply == 'no':
-            key_starosta = InlineKeyboardMarkup()
+            key_starosta = InlineKeyboardMarkup(resize_keyboard=True, selective=True)
             b_starosta_cancel = InlineKeyboardButton('🔙 Вернуться', callback_data=f'c_starosta cancel')
             key_starosta.add(b_starosta_cancel)
             await bot.send_message(user_id, 'Назовите опрос', reply_markup=key_starosta)
             await Form.s_starosta_poll.set()
-
-    elif call.data.startswith('c_poll'):
-        reply = call.data.split(' ')[1]
-        with state.proxy() as data:
-            data['reply'] = reply
-            await Form.s_starosta_poll_1.set()
         await f_delete_this_message(call.message)
 
     elif call.data == 'c_cancel':
@@ -1075,7 +1101,8 @@ async def query_handler(call: CallbackQuery, state: FSMContext):
             await dp.current_state(user=user_id).reset_data()
             await dp.current_state(user=user_id).finish()
             await bot.answer_callback_query(call.id, 'Отменено успешно', show_alert=False)
-        else: await f_add_user_true(user_id, dp.current_state(user=user_id))
+        else:
+            await f_add_user_true(user_id, dp.current_state(user=user_id))
         await f_delete_this_message(call.message)
 
     elif call.data == 'c_user_setting':
